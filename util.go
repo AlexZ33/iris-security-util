@@ -2,6 +2,7 @@ package iris_security_util
 
 import (
 	"github.com/pelletier/go-toml"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -54,4 +55,25 @@ func ParseString(value interface{}, values ...string) string {
 func StringifyTime(t time.Time) string {
 	layout := "2006-01-02"
 	return t.Format(layout)
+}
+
+func GetBool(tree *toml.Tree, key string, values ...bool) bool {
+	value := tree.Get(key)
+	if value != nil {
+		switch value.(type) {
+		case bool:
+			return value.(bool)
+		case string:
+			value, err := strconv.ParseBool(value.(string))
+			if err != nil {
+				log.Println(err)
+			} else {
+				return value
+			}
+		}
+	}
+	if len(values) > 0 {
+		return values[0]
+	}
+	return false
 }

@@ -9,10 +9,13 @@ import (
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"github.com/google/uuid"
 	"github.com/json-iterator/go"
+	"github.com/kataras/iris/v12"
 	"github.com/pelletier/go-toml"
 	"io"
 	"log"
@@ -162,7 +165,63 @@ func CheckIPWhitelist(whitelist []string, addr string) bool {
 }
 
 func Integrity(value interface{}, config *toml.Tree) string {
-	intergrity := strings.ToLower(GetString(config, "integrity", "SHA384"))
+	integrity := strings.ToLower(GetString(config, "integrity", "SHA384"))
 	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	content := make([]byte, 0)
+	bytes := make([]byte, 0)
+	object := iris.Map{}
+	isMap := false
+	switch value.(type) {
+	case iris.Map:
+		object = value.(iris.Map)
+		isMap = true
+	case []byte:
+		content = value.([]byte)
+	case string:
+		content = []byte(value.(string))
+	default:
+		bytes, err := json.Marshal(value)
+		if err != nil {
+			log.Println(err)
+		} else {
+			content = bytes
+		}
+	}
+	if !isMap {
+		err := jsoniter.Unmarshal(content, &object)
+		if err != nil {
+			log.Println(err)
+		} else {
+			isMap = true
+		}
+	}
+	if isMap {
+		bytes, err := json.Marshal(object)
+		if err != nil {
+			log.Println(err)
+		} else {
+			content = bytes
+		}
+	}
+	switch integrity {
+	case "sha256":
+		sum := sha256.Sum256(content)
+		bytes = sum[:]
+	case "sha384":
+		sum := sha512.Sum384(content)
+		bytes = sum[:]
+	case "sha512":
+		sum := sha512.Sum512(content)
+		bytes = sum[:]
+	default:
+		sum := sha512.Sum384(content)
+		bytes = sum[:]
+	}
+	return integrity + "-" + base64.StdEncoding.EncodeToString(bytes)
+}
 
+func Signature(signature string, digest string, config *toml.Tree) string {
+	integrity := strings.ToLower(GetString(config, "integrity", "SHA384"))
+	str := signature + strings.TrimPrefix(digest, integrity+"-")
+	return Hash(str, config, true)
 }
